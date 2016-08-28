@@ -1,1 +1,0 @@
-archiso.local install_target_device=vda part_id_prefix= new_hostname=myth-db ansible_user=root host_key_checking=false ansible_python_interpreter=/usr/bin/python2

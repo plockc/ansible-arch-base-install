@@ -4,76 +4,94 @@
 -   name: Check for install_target_device variable
     fail: msg="Missing install_target_device"
     when: not install_target_device
+-   fail: msg="Missing new_hostname"
+    when: not new_hostname
 -   name: Determine partition prefix
     set_fact:
         partiton_prefix: "{{ 'p' if install_target_device.startswith('mmcblk') else '' }}" 
--   fail: msg="just failing"
--   fail: msg="Missing new_hostname"
-    when: not new_hostname
 -   name: Ensure that there is no existing partition table
-    shell: '(parted --script /dev/{{ install_target_device }} print | grep -q "Partition Table: unknown")'
+    shell: '(parted --script /dev/{{ install_target_device }} print | egrep -q "Partition Table: (loop|unknown)")'
     register: is_unpartitioned
+    ignore_errors: true
 -   name: Create Partition Table
     command: "parted --script --align optimal -- /dev/{{ install_target_device }}
             mklabel msdos
             mkpart primary ext4 1 194559s
             mkpart primary ext4 194560s -1G
             mkpart primary linux-swap -1G -1s"
+    when: is_unpartitioned.rc == 0 # partition table unknown
 -   name: Partprobe for new partition
     command: "partprobe /dev/{{ install_target_device }}"
     when: is_unpartitioned.rc
 -   name: Create root filesystem
-    filesystem: dev="/dev/{{ install_target_device }}p2" fstype="ext4"
+    filesystem: dev="/dev/{{ install_target_device }}{{ part_id_prefix }}2" fstype="ext4"
 -   name: Unmount anything on /mnt and /var/cache/pacman/pkg
     command: umount -R /mnt /var/cache/pacman/pkg
     ignore_errors: true
 -   name: Mount root filesystem
-    command: "mount -t ext4 /dev/{{ install_target_device }}p2 /mnt"
+    command: "mount -t ext4 /dev/{{ install_target_device }}{{ part_id_prefix }}2 /mnt"
 -   name: Create boot filesystem
-    command: mkfs.ext4 "/dev/{{ install_target_device }}p1"
+    command: mkfs.ext4 "/dev/{{ install_target_device }}{{ part_id_prefix }}1"
 -   file: path=/mnt/boot state=directory
 -   name: Mount boot filesystem
-    command: "mount -t ext4 /dev/{{ install_target_device }}p1 /mnt/boot"
+    command: "mount -t ext4 /dev/{{ install_target_device }}{{ part_id_prefix }}1 /mnt/boot"
 -   name: Mkswap
-    command: "mkswap /dev/{{ install_target_device }}p3"
+    command: "mkswap /dev/{{ install_target_device }}{{ part_id_prefix }}3"
 -   name: Load 9p kernal modules
     modprobe: "name={{ item }}"
     with_items: ['9p', '9pnet', '9pnet_virtio']
-    when: vm
+    when: vm|bool
 -   name: Mount package cache
-    command: "mount -t 9p -o trans=virtio,version=9p2000.L,r /var/cache/pacman/pkg /var/cache/pacman/pkg"
+    command: "mount -t 9p -o trans=virtio,version=9p2000.L pacman_cache /var/cache/pacman/pkg"
     ignore_errors: true
-    when: vm
+    when: vm|bool
 -   name: Install packages with pacstrap
     command: pacstrap /mnt base base-devel openssh augeas ntp wget darkhttpd
-            unzip dnsutils rsync dtach tmux gnu-netcat wpa_supplicant
-            dialog alsa-utils vim git ethtool pv strace sysstat avahi nss-mdns
+        unzip dnsutils rsync dtach tmux gnu-netcat wpa_supplicant
+        dialog alsa-utils vim git ethtool pv strace sysstat avahi nss-mdns lshw python2
     tags: pacstrap
 -   name: unmount package cache
     command: umount /var/cache/pacman/pkg
-    when: vm
+    when: vm|bool
 -   name: Update fstab
     shell: "genfstab -p /mnt >> /mnt/etc/fstab"
--   lineinfile: dest="/mnt/etc/fstab" line="/dev/{{ install_target_device }}p3   swap   swap   defaults   0   0"
+-   lineinfile: dest="/mnt/etc/fstab" line="/dev/{{ install_target_device }}{{ part_id_prefix }}3   swap   swap   defaults   0   0"
 -   file: state=link src=/usr/share/zoneinfo/US/Pacific path=/mnt/etc/localtime
 -   name: Set LANG for locale
     copy: dest=/mnt/etc/locale.conf content="LANG=en_US.UTF-8"
--   name: set utf for locale
+-   name: set utf-8 for locale
     lineinfile: dest=/mnt/etc/locale.gen line="en_US.UTF-8 UTF-8"
--   name: set hostname
+-   name: set hostname to {{ new_hostname }}
     copy: dest=/mnt/etc/hostname content="{{ new_hostname }}"
+-   name: Load ssh key
+    set_fact:
+        my_ssh_key: "{{ lookup('env','HOME') }}/.ssh/id_rsa.pub"
+-   name: Add avahi for hostname resolution
+    lineinfile:
+        dest: /mnt/etc/nsswitch.conf
+        regexp: ^hosts
+        line: "hosts: files mdns_minimal [NOTFOUND=return] dns myhostname"
+-   name: Add ssh key
+    authorized_key:
+        user: root
+        key: "{{ lookup('file', my_ssh_key) }}"
+        path: /mnt/root/.ssh/authorized_keys
+    sudo: yes
+-   name: Allow 'wheel' group to have passwordless sudo
+    lineinfile:
+        dest: /mnt/etc/sudoers
+        state: present
+        regexp: '# %wheel ALL=(ALL) NOPASSWD: ALL'
+        line: '%wheel ALL=(ALL) NOPASSWD: ALL'
+
 -   shell: |
-        arch-chroot /mnt <<EOF
-            mkinitcpio -p linux
-            pacman --noconfirm -S syslinux
-            sed -i 's/sda3/{{ install_target_device }}p2/' /boot/syslinux/syslinux.cfg
-            syslinux-install_update -iam # install files(-i), set boot flag (-a), install MBR boot code (-m)
-            locale-gen # I think this reads from locale.conf which we set to en_US.UTF-8 earlier
-            systemctl enable sshd.service
-            #systemctl enable sshd.service ntpd.service dhcpcd avahi-daemon
-            exit # exit the chroot
-        EOF
-
-        umount /mnt/{boot,} 
-        reboot
-
+      arch-chroot /mnt <<EOF
+        mkinitcpio -p linux
+        pacman --noconfirm -S syslinux
+        sed -i 's/sda3/{{ install_target_device }}{{ part_id_prefix }}2/' /boot/syslinux/syslinux.cfg
+        syslinux-install_update -iam # install files(-i), set boot flag (-a), install MBR boot code (-m)
+        locale-gen # I think this reads from locale.conf which we set to en_US.UTF-8 earlier
+        systemctl enable sshd.service ntpd.service dhcpcd avahi-daemon
+        exit # exit the chroot
+      EOF
+-   shell: umount /mnt/{boot,} 

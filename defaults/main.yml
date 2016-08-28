@@ -1,0 +1,5 @@
+---
+new_hostname: "{{ vm_name }}"
+new_host_fqdn: "{{ new_hostname}}.local"
+
+part_id_prefix:
