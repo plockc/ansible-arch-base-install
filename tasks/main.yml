@@ -53,9 +53,10 @@
     ignore_errors: true
     when: vm|bool
 -   name: Install packages with pacstrap
-    command: pacstrap /mnt base base-devel openssh augeas ntp wget darkhttpd
-        unzip dnsutils rsync dtach tmux gnu-netcat wpa_supplicant
-        dialog alsa-utils vim git ethtool pv strace sysstat avahi nss-mdns lshw python2
+    command: pacstrap -c /mnt 
+        base base-devel openssh augeas ntp wget darkhttpd unzip dnsutils
+        rsync dtach tmux gnu-netcat wpa_supplicant dialog alsa-utils vim
+        git ethtool pv strace sysstat avahi nss-mdns lshw python2
     tags: pacstrap
 -   name: unmount package cache
     command: umount /var/cache/pacman/pkg
