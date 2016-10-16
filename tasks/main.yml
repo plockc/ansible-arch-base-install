@@ -24,14 +24,21 @@
     command: "partprobe /dev/{{ install_target_device }}"
     when: is_unpartitioned.rc
 -   name: Create root filesystem
-    filesystem: dev="/dev/{{ install_target_device }}{{ part_id_prefix }}2" fstype="ext4"
+    filesystem:
+        dev: "/dev/{{ install_target_device }}{{ part_id_prefix }}2"
+        fstype: "ext4"
+        force: yes
 -   name: Unmount anything on /mnt and /var/cache/pacman/pkg
     command: umount -R /mnt /var/cache/pacman/pkg
     ignore_errors: true
 -   name: Mount root filesystem
     command: "mount -t ext4 /dev/{{ install_target_device }}{{ part_id_prefix }}2 /mnt"
 -   name: Create boot filesystem
-    command: mkfs.ext4 "/dev/{{ install_target_device }}{{ part_id_prefix }}1"
+    filesystem:
+        dev: "/dev/{{ install_target_device }}{{ part_id_prefix }}1"
+        fstype: "ext4"
+        force: yes
+    
 -   file: path=/mnt/boot state=directory
 -   name: Mount boot filesystem
     command: "mount -t ext4 /dev/{{ install_target_device }}{{ part_id_prefix }}1 /mnt/boot"
