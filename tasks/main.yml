@@ -84,7 +84,7 @@
         user: root
         key: "{{ lookup('file', my_ssh_key) }}"
         path: /mnt/root/.ssh/authorized_keys
-    sudo: yes
+    become: yes
 -   name: Allow 'wheel' group to have passwordless sudo
     lineinfile:
         dest: /mnt/etc/sudoers
