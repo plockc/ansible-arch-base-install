@@ -53,11 +53,13 @@
     ignore_errors: true
     when: vm|bool
 -   name: Install packages with pacstrap
-    command: pacstrap -c /mnt 
+    command: pacstrap {{ '-c' if vm|bool else '' }} /mnt 
         base base-devel openssh augeas ntp wget darkhttpd unzip dnsutils
         rsync dtach tmux gnu-netcat wpa_supplicant dialog alsa-utils vim
         git ethtool pv strace sysstat avahi nss-mdns lshw python2
+    register: pacstrap
     tags: pacstrap
+-   debug: msg="{{ pacstrap }}"
 -   name: unmount package cache
     command: umount /var/cache/pacman/pkg
     when: vm|bool
