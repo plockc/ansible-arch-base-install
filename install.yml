@@ -1,0 +1,5 @@
+- name: Basic Arch Install
+  hosts: provisioned
+  roles:
+      - ansible-arch-base-install
+  
