@@ -3,3 +3,7 @@ new_hostname: "{{ vm_name }}"
 new_host_fqdn: "{{ new_hostname}}.local"
 
 part_id_prefix:
+
+vm: no
+
+pub_key: "{{ lookup('file', lookup('env', 'HOME') ~ '/.ssh/id_rsa.pub') }}"
