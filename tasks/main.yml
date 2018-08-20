@@ -10,40 +10,36 @@
     set_fact:
         partiton_prefix: "{{ 'p' if install_target_device.startswith('mmcblk') else '' }}" 
 -   name: Ensure that there is no existing partition table
-    shell: '(parted --script /dev/{{ install_target_device }} print | egrep -q "Partition Table: (loop|unknown)")'
-    register: is_unpartitioned
+    shell: '(lsblk -l /dev/{{ install_target_device }} --output TYPE --noheadings | grep -q part)'
+    register: is_partitioned
     ignore_errors: true
 -   name: Create Partition Table
     command: "parted --script --align optimal -- /dev/{{ install_target_device }}
-            mklabel msdos
-            mkpart primary ext4 1 194559s
-            mkpart primary ext4 194560s -1G
-            mkpart primary linux-swap -1G -1s"
-    when: is_unpartitioned.rc == 0 # partition table unknown
+            mklabel gpt
+            mkpart ESP fat32 1MiB 513MiB
+            set 1 boot on
+            mkpart primary ext4 513MiB 100%"
+    when: is_partitioned.rc == 1 # no partitions in partition table
 -   name: Partprobe for new partition
     command: "partprobe /dev/{{ install_target_device }}"
-    when: is_unpartitioned.rc
+    when: is_partitioned.rc == 1
 -   name: Create root filesystem
     filesystem:
         dev: "/dev/{{ install_target_device }}{{ part_id_prefix }}2"
-        fstype: "ext4"
+        fstype: ext4
         force: yes
+    when: is_partitioned.rc == 1 # no partitions in partition table
 -   name: Unmount anything on /mnt and /var/cache/pacman/pkg
     command: umount -R /mnt /var/cache/pacman/pkg
     ignore_errors: true
 -   name: Mount root filesystem
     command: "mount -t ext4 /dev/{{ install_target_device }}{{ part_id_prefix }}2 /mnt"
 -   name: Create boot filesystem
-    filesystem:
-        dev: "/dev/{{ install_target_device }}{{ part_id_prefix }}1"
-        fstype: "ext4"
-        force: yes
-    
+    command: "mkfs.fat -F32 /dev/{{ install_target_device }}{{ part_id_prefix }}1"
+    when: is_partitioned.rc == 1 # no partitions in partition table
 -   file: path=/mnt/boot state=directory
 -   name: Mount boot filesystem
-    command: "mount -t ext4 /dev/{{ install_target_device }}{{ part_id_prefix }}1 /mnt/boot"
--   name: Mkswap
-    command: "mkswap /dev/{{ install_target_device }}{{ part_id_prefix }}3"
+    command: "mount /dev/{{ install_target_device }}{{ part_id_prefix }}1 /mnt/boot"
 -   name: Load 9p kernal modules
     modprobe: "name={{ item }}"
     with_items: ['9p', '9pnet', '9pnet_virtio']
