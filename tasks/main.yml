@@ -52,6 +52,8 @@
     command: "mount -t 9p -o trans=virtio,version=9p2000.L pacman_cache /var/cache/pacman/pkg"
     ignore_errors: true
     when: vm|bool
+-   name: Update keyring
+    command: pacman --noconfirm -Sy archlinux-keyring
 -   name: Install packages with pacstrap
     command: pacstrap {{ '-c' if vm|bool else '' }} /mnt 
         base base-devel openssh augeas ntp wget darkhttpd unzip dnsutils
@@ -73,9 +75,6 @@
     lineinfile: dest=/mnt/etc/locale.gen line="en_US.UTF-8 UTF-8"
 -   name: set hostname to {{ new_hostname }}
     copy: dest=/mnt/etc/hostname content="{{ new_hostname }}"
--   name: Load ssh key
-    set_fact:
-        my_ssh_key: "{{ lookup('env','HOME') }}/.ssh/id_rsa.pub"
 -   name: Add avahi for hostname resolution
     lineinfile:
         dest: /mnt/etc/nsswitch.conf
@@ -84,7 +83,7 @@
 -   name: Add ssh key
     authorized_key:
         user: root
-        key: "{{ lookup('file', my_ssh_key) }}"
+        key: "{{ pub_key }}"
         path: /mnt/root/.ssh/authorized_keys
     become: yes
 -   name: Allow 'wheel' group to have passwordless sudo
